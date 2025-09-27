@@ -102,7 +102,7 @@ export default function StockCheckerPage() {
                         <p className="text-gray-300 mt-2">Check stock status across online Indian pharmacies.</p>
                     </div>
 
-                    <form onSubmit={handleSearch} className="flex gap-3 mb-6">
+                    <form onSubmit={handleSearch} className="flex gap-3 mb-6 flex-col md:flex-row">
                         <input
                             type="text"
                             placeholder="Enter a medicine name..."
