@@ -1,7 +1,7 @@
 'use client';
 
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 // Icon component for the result cards
 const ResultIcon = ({ status }) => {
@@ -27,52 +27,104 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
-  const [imageFile, setImageFile] = useState(null); // To store the actual file for upload
+  const [imageFile, setImageFile] = useState(null);
+
+  // States for speech recognition
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState('');
+  const recognitionRef = useRef(null);
+
 
   const fileInputRef = useRef(null);
 
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      const recognition = recognitionRef.current;
+      recognition.continuous = false;
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setSpeechStatus('Listening...');
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript.trim();
+        setMedicineName(transcript);
+        // Automatically trigger verification after successful transcription
+        handleCheckAuthenticity(null, transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setSpeechStatus(`Error: ${event.error}. Please try again.`);
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        setSpeechStatus('');
+      };
+    }
+  }, []);
+
+  const toggleRecording = () => {
+    if (!recognitionRef.current) {
+        setSpeechStatus("Sorry, your browser doesn't support speech recognition.");
+        return;
+    }
+    if (isRecording) {
+      recognitionRef.current.stop();
+    } else {
+      setResult(null); // Clear previous results
+      recognitionRef.current.start();
+    }
+  };
+
+
   const verifyWithRxNorm = async (text) => {
-    if (!text || text.trim().length < 3) { // Ignore very short words
+    if (!text || text.trim().length < 3) {
         return { found: false, name: null };
     }
     
-    // Split the text into individual words to check each one.
     const words = text.trim().split(/[\s\n\r,.]+/);
 
     for (const word of words) {
-        // A simple filter for common non-drug words to reduce API calls
         if (word.length < 3 || !isNaN(word)) continue;
         
         try {
             const response = await fetch(`https://rxnav.nlm.nih.gov/REST/drugs.json?name=${word}`);
-            if (!response.ok) continue; // Try the next word if API fails
+            if (!response.ok) continue;
             const data = await response.json();
             if (data.drugGroup?.conceptGroup) {
                 const match = data.drugGroup.conceptGroup.some(group => 
                     group.conceptProperties?.some(prop => prop.name.toLowerCase().includes(word.toLowerCase()))
                 );
-                // If a match is found for any word, return immediately as authentic.
                 if (match) return { found: true, name: word };
             }
         } catch (error) {
             console.error(`RxNorm API request failed for word "${word}":`, error);
         }
     }
-    // If the loop completes without finding any valid drug name
     return { found: false, name: text };
   };
 
-  const handleCheckAuthenticity = async (e) => {
-    e.preventDefault();
+  const handleCheckAuthenticity = async (e, spokenText = null) => {
+    if (e) e.preventDefault();
     
-    if (!medicineName && !imageFile) {
+    const textToUse = spokenText || medicineName;
+
+    if (!textToUse && !imageFile) {
         setResult({ status: 'Uncertain', message: 'Please enter a medicine name or upload an image.' });
         return;
     }
 
     setLoading(true);
     setResult(null);
-    let textToVerify = medicineName;
+    let textToVerify = textToUse;
 
     try {
         if (imageFile) {
@@ -88,10 +140,8 @@ export default function HomePage() {
                 body: formData,
             });
 
-            if (!ocrResponse.ok) {
-                throw new Error('Image analysis API request failed.');
-            }
-
+            if (!ocrResponse.ok) throw new Error('Image analysis API request failed.');
+            
             const ocrData = await ocrResponse.json();
             
             if (ocrData.IsErroredOnProcessing || !ocrData.ParsedResults?.length) {
@@ -99,7 +149,6 @@ export default function HomePage() {
                  setLoading(false);
                  return;
             }
-
             textToVerify = ocrData.ParsedResults[0].ParsedText.trim();
 
             if(!textToVerify) {
@@ -113,7 +162,7 @@ export default function HomePage() {
         const verification = await verifyWithRxNorm(textToVerify);
 
         if (verification.found) {
-             setResult({ status: 'Authentic', message: `Verified: "${verification.name}" appears to be an authentic medication name found in the RxNorm database.` });
+             setResult({ status: 'Authentic', message: `Verified: "${verification.name}" appears to be an authentic medication name found in the RxNorm database.For more info go to the info page` });
         } else {
              setResult({ status: 'Counterfeit', message: `Warning: No recognized drug name was found in the text "${textToVerify}". Please check the spelling or be cautious.` });
         }
@@ -193,7 +242,7 @@ export default function HomePage() {
         return (
             <div className="flex flex-col items-center justify-center space-y-4 min-h-[150px]">
                 <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-purple-400"></div>
-                <p className="text-lg text-gray-300 capitalize">{loadingMessage}</p>
+                <p className="text-lg text-gray-300 capitalize">{loadingMessage || speechStatus}</p>
             </div>
         );
       }
@@ -202,15 +251,21 @@ export default function HomePage() {
         <form onSubmit={handleCheckAuthenticity} className="w-full text-center space-y-6">
             <div>
                  <label className="text-xl font-semibold mb-2 block">Enter Medicine Name</label>
-                 <p className="text-gray-400 mb-4">Type the name from the packaging to verify.</p>
-                 <input 
-                    type="text"
-                    value={medicineName}
-                    onChange={(e) => { setMedicineName(e.target.value); setImageFile(null); setImagePreview(null); }}
-                    placeholder="e.g., Aspirin"
-                    disabled={!!imagePreview}
-                    className="w-full max-w-md mx-auto px-4 py-3 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:opacity-50"
-                />
+                 <p className="text-gray-400 mb-4">Type or speak the name from the packaging.</p>
+                 <div className="relative w-full max-w-md mx-auto">
+                    <input 
+                        type="text"
+                        value={medicineName}
+                        onChange={(e) => { setMedicineName(e.target.value); setImageFile(null); setImagePreview(null); }}
+                        placeholder="e.g., Aspirin"
+                        disabled={!!imagePreview || isRecording}
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:opacity-50 pr-12"
+                    />
+                    <button type="button" onClick={toggleRecording} className={`absolute inset-y-0 right-0 flex items-center px-3 rounded-r-md transition-colors ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-600 hover:bg-purple-700'}`} disabled={loading}>
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                    </button>
+                 </div>
+                 {speechStatus && <p className="text-center text-sm text-gray-400 mt-2">{speechStatus}</p>}
             </div>
             <div className="flex items-center justify-center gap-4">
                 <hr className="w-full border-gray-700"/>
@@ -225,7 +280,7 @@ export default function HomePage() {
             <button 
                 type="submit"
                 className="bg-white text-black px-10 py-3 rounded-md font-semibold hover:bg-gray-200 transition-transform hover:scale-105 disabled:opacity-60 disabled:scale-100"
-                disabled={!medicineName && !imagePreview}
+                disabled={(!medicineName && !imagePreview) || isRecording}
             >
                 Verify
             </button>
@@ -255,6 +310,7 @@ export default function HomePage() {
                 </div>
                  <p className="text-center text-xs text-gray-600 mt-4 max-w-2xl mx-auto">
                     Disclaimer: This tool checks for the existence of a drug name in the NIH RxNorm database. It cannot verify batch numbers or the physical properties of the medication. This service is for informational purposes and is not a substitute for professional medical advice.
+                    The speech to text feature is based on pronounciation and may not always be accurate. For better results, please type the name manually.
                 </p>
             </div>
         </section>
@@ -263,4 +319,3 @@ export default function HomePage() {
     </div>
   );
 }
-
