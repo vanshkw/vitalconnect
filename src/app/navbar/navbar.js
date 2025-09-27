@@ -29,7 +29,7 @@ const Navbar = () => {
           <div className="hidden md:block">
             <div className="flex items-center space-x-2">
                  <Link href="/tandc" className="text-gray-300 hover:text-white px-4 py-2 rounded-md text-sm font-medium">
-                    Guidelines
+                    T & C
                 </Link>
                 <Link href="/availability" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">
                     Check Availability
