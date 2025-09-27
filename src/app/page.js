@@ -1,7 +1,8 @@
 'use client';
 
-
 import { useState, useRef, useEffect } from 'react';
+// Import the local medicine names data
+import medicineData from './medicine_names.json';
 
 // Icon component for the result cards
 const ResultIcon = ({ status }) => {
@@ -28,13 +29,9 @@ export default function HomePage() {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
   const [imageFile, setImageFile] = useState(null);
-
-  // States for speech recognition
   const [isRecording, setIsRecording] = useState(false);
   const [speechStatus, setSpeechStatus] = useState('');
   const recognitionRef = useRef(null);
-
-
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -45,16 +42,13 @@ export default function HomePage() {
       recognition.continuous = false;
       recognition.lang = 'en-US';
       recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        setSpeechStatus('Listening...');
-        setIsRecording(true);
-      };
-
+      recognition.onstart = () => { setSpeechStatus('Listening...'); setIsRecording(true); };
+      
       recognition.onresult = (event) => {
-        const transcript = event.results[event.results.length - 1][0].transcript.trim();
+        // MODIFICATION: Convert transcript to lowercase immediately to remove case sensitivity from speech input.
+        const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+        
         setMedicineName(transcript);
-        // Automatically trigger verification after successful transcription
         handleCheckAuthenticity(null, transcript);
       };
 
@@ -63,11 +57,7 @@ export default function HomePage() {
         setSpeechStatus(`Error: ${event.error}. Please try again.`);
         setIsRecording(false);
       };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-        setSpeechStatus('');
-      };
+      recognition.onend = () => { setIsRecording(false); setSpeechStatus(''); };
     }
   }, []);
 
@@ -79,22 +69,43 @@ export default function HomePage() {
     if (isRecording) {
       recognitionRef.current.stop();
     } else {
-      setResult(null); // Clear previous results
+      setResult(null);
       recognitionRef.current.start();
     }
   };
 
+  /**
+   * Verifies by checking if the input text CONTAINS a known medicine name, ignoring case.
+   */
+  const verifyWithLocalJSON = (text) => {
+    if (!text || !Array.isArray(medicineData)) {
+      return { found: false, name: null };
+    }
+    
+    // Convert input to lowercase
+    const inputTextLower = text.trim().toLowerCase();
+
+    // Sort by length, longest first, to match "Aspirin Plus" before "Aspirin"
+    const sortedMedicineData = [...medicineData].sort((a, b) => b.length - a.length);
+
+    for (const medicineName of sortedMedicineData) {
+        // Convert dataset name to lowercase
+        const medicineNameLower = medicineName.trim().toLowerCase();
+        if (medicineNameLower && inputTextLower.includes(medicineNameLower)) {
+            // Return the original properly-cased name for display
+            return { found: true, name: medicineName };
+        }
+    }
+    return { found: false, name: text };
+  };
 
   const verifyWithRxNorm = async (text) => {
     if (!text || text.trim().length < 3) {
         return { found: false, name: null };
     }
-    
     const words = text.trim().split(/[\s\n\r,.]+/);
-
     for (const word of words) {
         if (word.length < 3 || !isNaN(word)) continue;
-        
         try {
             const response = await fetch(`https://rxnav.nlm.nih.gov/REST/drugs.json?name=${word}`);
             if (!response.ok) continue;
@@ -114,9 +125,7 @@ export default function HomePage() {
 
   const handleCheckAuthenticity = async (e, spokenText = null) => {
     if (e) e.preventDefault();
-    
     const textToUse = spokenText || medicineName;
-
     if (!textToUse && !imageFile) {
         setResult({ status: 'Uncertain', message: 'Please enter a medicine name or upload an image.' });
         return;
@@ -134,23 +143,18 @@ export default function HomePage() {
             formData.append('file', imageFile);
             formData.append('apikey', ocrApiKey);
             formData.append('language', 'eng');
-
             const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
                 method: 'POST',
                 body: formData,
             });
-
             if (!ocrResponse.ok) throw new Error('Image analysis API request failed.');
-            
             const ocrData = await ocrResponse.json();
-            
             if (ocrData.IsErroredOnProcessing || !ocrData.ParsedResults?.length) {
                  setResult({ status: 'Uncertain', message: `Could not analyze image. ${ocrData.ErrorMessage || 'Please try a clearer picture.'}` });
                  setLoading(false);
                  return;
             }
             textToVerify = ocrData.ParsedResults[0].ParsedText.trim();
-
             if(!textToVerify) {
                  setResult({ status: 'Uncertain', message: 'Could not read any text from the image. Please try a clearer picture or type the name manually.' });
                  setLoading(false);
@@ -158,13 +162,24 @@ export default function HomePage() {
             }
         }
         
-        setLoadingMessage('Verifying with RxNorm database...');
-        const verification = await verifyWithRxNorm(textToVerify);
+        setLoadingMessage('Verifying medicine name...');
+        
+        const localVerification = verifyWithLocalJSON(textToVerify);
+        if (localVerification.found) {
+             setResult({ 
+                status: 'Authentic', 
+                message: `Verified: "${localVerification.name}" appears to be an authentic medication name found in local records.` 
+            });
+            setLoading(false);
+            return; 
+        }
 
-        if (verification.found) {
-             setResult({ status: 'Authentic', message: `Verified: "${verification.name}" appears to be an authentic medication name found in the RxNorm database.For more info go to the info page` });
+        setLoadingMessage('Verifying with RxNorm database...');
+        const rxNormVerification = await verifyWithRxNorm(textToVerify);
+        if (rxNormVerification.found) {
+             setResult({ status: 'Authentic', message: `Verified: "${rxNormVerification.name}" appears to be an authentic medication name found in the RxNorm database. For more info go to the info page.` });
         } else {
-             setResult({ status: 'Counterfeit', message: `Warning: No recognized drug name was found in the text "${textToVerify}". Please check the spelling or be cautious.` });
+             setResult({ status: 'Counterfeit', message: `Warning: No recognized drug name was found for "${textToVerify}" in local records or the RxNorm database. Please check the spelling or be cautious.` });
         }
     } catch (error) {
         console.error(error);
@@ -272,11 +287,7 @@ export default function HomePage() {
                 <span className="text-gray-400">OR</span>
                 <hr className="w-full border-gray-700"/>
             </div>
-
-            <div className="w-full max-w-md mx-auto">
-                 {renderImageSection()}
-            </div>
-
+            <div className="w-full max-w-md mx-auto">{renderImageSection()}</div>
             <button 
                 type="submit"
                 className="bg-white text-black px-10 py-3 rounded-md font-semibold hover:bg-gray-200 transition-transform hover:scale-105 disabled:opacity-60 disabled:scale-100"
@@ -290,7 +301,6 @@ export default function HomePage() {
 
   return (
     <div className="bg-[#0D0D0D] text-white min-h-screen flex flex-col">
-      
       <main className="pt-16 flex-grow">
         <section className="text-center py-16 lg:py-24">
             <div className="container mx-auto px-4">
@@ -309,13 +319,12 @@ export default function HomePage() {
                     {renderContent()}
                 </div>
                  <p className="text-center text-xs text-gray-600 mt-4 max-w-2xl mx-auto">
-                    Disclaimer: This tool checks for the existence of a drug name in the NIH RxNorm database. It cannot verify batch numbers or the physical properties of the medication. This service is for informational purposes and is not a substitute for professional medical advice.
+                    Disclaimer: This tool checks for the existence of a drug name in the NIH RxNorm database and local records. It cannot verify batch numbers or the physical properties of the medication. This service is for informational purposes and is not a substitute for professional medical advice.
                     The speech to text feature is based on pronounciation and may not always be accurate. For better results, please type the name manually.
                 </p>
             </div>
         </section>
       </main>
-      
     </div>
   );
 }
