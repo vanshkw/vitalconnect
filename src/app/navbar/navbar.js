@@ -11,8 +11,8 @@ const Navbar = () => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex-shrink-0">
-            <Link href="/" className="text-2xl font-bold text-white">
-              VitalConnect
+            <Link href="/" className="text-2xl font-bold text-white grid grid-cols-2" >
+              VitalConnect <span className='hidden lg:block'>(aushadhi-OCR)</span>
             </Link>
           </div>
           {/* Desktop Menu */}
@@ -35,7 +35,7 @@ const Navbar = () => {
           <div className="hidden md:block">
             <div className="flex items-center space-x-2">
                  <Link href="/tandc" className="text-gray-300 hover:text-white px-4 py-2 rounded-md text-md font-medium">
-                    T & C
+                    Terms
                 </Link>
                 <Link href="/availability" className="bg-white text-black px-4 py-2 rounded-md text-md font-medium hover:bg-gray-200">
                     Check Availability
