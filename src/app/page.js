@@ -381,7 +381,7 @@ export default function HomePage() {
                     Verify Your Medication Instantly
                 </h1>
                 <p className="max-w-2xl mx-auto text-lg md:text-xl text-gray-300">
-                    Type in your medicine's name or upload an image of the packaging to check its authenticity.
+                    Type in your medicine&apos;s name or upload an image of the packaging to check its authenticity.
                 </p>
             </div>
         </section>

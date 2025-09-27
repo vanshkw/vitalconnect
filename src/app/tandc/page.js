@@ -19,7 +19,7 @@ export default function TermsAndConditionsPage() {
                         <div className="prose prose-invert max-w-none text-gray-300">
                             <h2>Introduction</h2>
                             <p>
-                                Welcome to Medi-Verify ("we," "our," or "us"). These Terms & Conditions ("Terms") govern your use of our application, website, and related services (collectively, the "Services"). By accessing or using the Services, you agree to these Terms. If you do not agree, please do not use our Services.
+                                Welcome to Medi-Verify (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). These Terms & Conditions (&quot;Terms&quot;) govern your use of our application, website, and related services (collectively, the &quot;Services&quot;). By accessing or using the Services, you agree to these Terms. If you do not agree, please do not use our Services.
                             </p>
 
                             <h2>1. Medical Disclaimer</h2>
