@@ -192,7 +192,7 @@ export default function MedInfoPage() {
   );
 
   return (
-    <div className="bg-[#0D0D0D] text-white min-h-screen flex flex-col">
+    <div className="bg-[#0D0D0D] mt-32 text-white min-h-screen flex flex-col">
         
         <main className="min-h-screen bg-[#0D0D0D] text-white p-4 sm:p-6 lg:p-8 flex flex-col items-center font-sans flex-grow">
         <div className="w-full max-w-2xl">

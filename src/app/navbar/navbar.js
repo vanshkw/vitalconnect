@@ -12,26 +12,26 @@ const Navbar = () => {
           </div>
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
-              <Link href="#" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+              <Link href="/" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                 Home
               </Link>
-              <Link href="#" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+              <Link href="/medinfo" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                 Info
               </Link>
-              <Link href="#" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+              <Link href="/medstores" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                 Medstores Nearby
               </Link>
-              <Link href="#" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+              <Link href="/prescription" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                 Prescription Reader
               </Link>
             </div>
           </div>
           <div className="hidden md:block">
             <div className="flex items-center space-x-2">
-                 <Link href="#" className="text-gray-300 hover:text-white px-4 py-2 rounded-md text-sm font-medium">
+                 <Link href="/tandc" className="text-gray-300 hover:text-white px-4 py-2 rounded-md text-sm font-medium">
                     Guidelines
                 </Link>
-                <Link href="#" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">
+                <Link href="/pricing" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">
                     Compare Pricing
                 </Link>
             </div>
