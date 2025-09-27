@@ -35,6 +35,7 @@ export default function StoresPage() {
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [manualLocation, setManualLocation] = useState('');
 
   // Dynamically load Leaflet and initialize map
   useEffect(() => {
@@ -82,128 +83,147 @@ export default function StoresPage() {
       }
     };
   }, []);
-  
-  const findStores = () => {
-    // Guard against function being called before map is ready
+
+  const fetchAndDisplayStores = async (latitude, longitude) => {
+      setUserLocation({ lat: latitude, lng: longitude });
+
+      // Center map on user location
+      mapInstance.current.setView([latitude, longitude], 14);
+      
+      // Add a marker for the user's location
+      const userIcon = window.L.divIcon({
+          html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-blue-500"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25z" clip-rule="evenodd" /></svg>`,
+          className: 'bg-transparent border-0',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+      });
+      const userMarker = window.L.marker([latitude, longitude], { icon: userIcon }).addTo(mapInstance.current)
+          .bindPopup('Your Location').openPopup();
+      markersRef.current.push(userMarker);
+      
+      try {
+          let pharmacies = [];
+          // First, try to find stores within 1km
+          const initialQuery = `
+            [out:json];
+            (
+              node["amenity"="pharmacy"](around:1000, ${latitude}, ${longitude});
+              way["amenity"="pharmacy"](around:1000, ${latitude}, ${longitude});
+              relation["amenity"="pharmacy"](around:1000, ${latitude}, ${longitude});
+            );
+            out center;
+          `;
+          const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(initialQuery)}`);
+          const data = await response.json();
+          pharmacies = data.elements.map(el => ({
+              id: el.id,
+              name: el.tags.name || "Unnamed Pharmacy",
+              lat: el.lat || el.center.lat,
+              lng: el.lon || el.center.lon
+          }));
+
+          // If no stores are found, search a wider area for the 5 closest
+          if (pharmacies.length === 0) {
+              setError("No stores found within 1km. Searching a wider area for the 5 closest...");
+              const widerQuery = `
+                [out:json];
+                (
+                  node["amenity"="pharmacy"](around:10000, ${latitude}, ${longitude});
+                  way["amenity"="pharmacy"](around:10000, ${latitude}, ${longitude});
+                  relation["amenity"="pharmacy"](around:10000, ${latitude}, ${longitude});
+                );
+                out center;
+              `;
+              const widerResponse = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(widerQuery)}`);
+              const widerData = await widerResponse.json();
+              const allPharmacies = widerData.elements.map(el => ({
+                  id: el.id,
+                  name: el.tags.name || "Unnamed Pharmacy",
+                  lat: el.lat || el.center.lat,
+                  lng: el.lon || el.center.lon,
+                  distance: getDistance(latitude, longitude, el.lat || el.center.lat, el.lon || el.center.lon)
+              }));
+
+              if (allPharmacies.length > 0) {
+                  // Sort by distance and take the closest 5
+                  pharmacies = allPharmacies.sort((a, b) => a.distance - b.distance).slice(0, 5);
+              }
+          }
+
+          if (pharmacies.length === 0) {
+              setError("No medical stores found near your location.");
+          } else {
+               setError(null); // Clear any searching messages
+               setStores(pharmacies);
+               // Add markers for each store
+              const pharmacyIcon = window.L.icon({
+                  iconUrl: `data:image/svg+xml,${pharmacyIconSvg}`,
+                  iconSize: [32, 32],
+                  iconAnchor: [16, 32],
+                  popupAnchor: [0, -32]
+              });
+              pharmacies.forEach(store => {
+                  const storeMarker = window.L.marker([store.lat, store.lng], { icon: pharmacyIcon })
+                      .addTo(mapInstance.current)
+                      .bindPopup(store.name);
+                  markersRef.current.push(storeMarker);
+              });
+          }
+      } catch(err) {
+          setError("Failed to fetch store data. Please try again.");
+          console.error(err);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const findStores = async () => {
     if (!mapInstance.current) {
       setError("Map is not ready yet. Please wait a moment.");
       return;
     }
-
     setLoading(true);
     setError(null);
     setStores([]);
-
-    // Clear previous markers from the map
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-    if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser.");
-      setLoading(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserLocation({ lat: latitude, lng: longitude });
-
-        // Center map on user location
-        mapInstance.current.setView([latitude, longitude], 14);
-        
-        // Add a marker for the user's location
-        const userIcon = window.L.divIcon({
-            html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-blue-500"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25z" clip-rule="evenodd" /></svg>`,
-            className: 'bg-transparent border-0',
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-        });
-        const userMarker = window.L.marker([latitude, longitude], { icon: userIcon }).addTo(mapInstance.current)
-            .bindPopup('Your Location').openPopup();
-        markersRef.current.push(userMarker);
-        
+    if (manualLocation.trim()) {
         try {
-            let pharmacies = [];
-            // First, try to find stores within 1km
-            const initialQuery = `
-              [out:json];
-              (
-                node["amenity"="pharmacy"](around:1000, ${latitude}, ${longitude});
-                way["amenity"="pharmacy"](around:1000, ${latitude}, ${longitude});
-                relation["amenity"="pharmacy"](around:1000, ${latitude}, ${longitude});
-              );
-              out center;
-            `;
-            const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(initialQuery)}`);
-            const data = await response.json();
-            pharmacies = data.elements.map(el => ({
-                id: el.id,
-                name: el.tags.name || "Unnamed Pharmacy",
-                lat: el.lat || el.center.lat,
-                lng: el.lon || el.center.lon
-            }));
+            const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(manualLocation)}`);
+            if (!geoResponse.ok) throw new Error('Geocoding API failed');
+            const geoData = await geoResponse.json();
 
-            // If no stores are found, search a wider area for the 5 closest
-            if (pharmacies.length === 0) {
-                setError("No stores found within 1km. Searching a wider area for the 5 closest...");
-                const widerQuery = `
-                  [out:json];
-                  (
-                    node["amenity"="pharmacy"](around:10000, ${latitude}, ${longitude});
-                    way["amenity"="pharmacy"](around:10000, ${latitude}, ${longitude});
-                    relation["amenity"="pharmacy"](around:10000, ${latitude}, ${longitude});
-                  );
-                  out center;
-                `;
-                const widerResponse = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(widerQuery)}`);
-                const widerData = await widerResponse.json();
-                const allPharmacies = widerData.elements.map(el => ({
-                    id: el.id,
-                    name: el.tags.name || "Unnamed Pharmacy",
-                    lat: el.lat || el.center.lat,
-                    lng: el.lon || el.center.lon,
-                    distance: getDistance(latitude, longitude, el.lat || el.center.lat, el.lon || el.center.lon)
-                }));
-
-                if (allPharmacies.length > 0) {
-                    // Sort by distance and take the closest 5
-                    pharmacies = allPharmacies.sort((a, b) => a.distance - b.distance).slice(0, 5);
-                }
-            }
-
-            if (pharmacies.length === 0) {
-                setError("No medical stores found near your location.");
+            if (geoData && geoData.length > 0) {
+                const { lat, lon } = geoData[0];
+                await fetchAndDisplayStores(parseFloat(lat), parseFloat(lon));
             } else {
-                 setError(null); // Clear any searching messages
-                 setStores(pharmacies);
-                 // Add markers for each store
-                const pharmacyIcon = window.L.icon({
-                    iconUrl: `data:image/svg+xml,${pharmacyIconSvg}`,
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 32],
-                    popupAnchor: [0, -32]
-                });
-                pharmacies.forEach(store => {
-                    const storeMarker = window.L.marker([store.lat, store.lng], { icon: pharmacyIcon })
-                        .addTo(mapInstance.current)
-                        .bindPopup(store.name);
-                    markersRef.current.push(storeMarker);
-                });
+                setError(`Could not find location: "${manualLocation}". Please be more specific.`);
+                setLoading(false);
             }
-        } catch(err) {
-            setError("Failed to fetch store data. Please try again.");
-            console.error(err);
-        } finally {
+        } catch (err) {
+            setError("Failed to find location. Please check your network or try a different name.");
             setLoading(false);
+            console.error(err);
+        }
+    } else {
+        if (!navigator.geolocation) {
+          setError("Geolocation is not supported by your browser. Please enter a location manually.");
+          setLoading(false);
+          return;
         }
 
-      },
-      () => {
-        setError("Unable to retrieve your location. Please enable location services.");
-        setLoading(false);
-      }
-    );
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            fetchAndDisplayStores(latitude, longitude);
+          },
+          () => {
+            setError("Unable to retrieve your location. Please enable location services or enter one manually.");
+            setLoading(false);
+          }
+        );
+    }
   };
 
   return (
@@ -216,14 +236,23 @@ export default function StoresPage() {
                     Find Nearby Medical Stores
                 </h1>
                 <p className="max-w-2xl mx-auto text-lg md:text-xl text-gray-300 mb-8">
-                    Click the button below to find pharmacies and medical stores near your current location.
+                    Use your current location or type a location below to find nearby pharmacies.
                 </p>
+                <div className="max-w-xl mx-auto mb-6">
+                    <input
+                        type="text"
+                        value={manualLocation}
+                        onChange={(e) => setManualLocation(e.target.value)}
+                        placeholder="e.g., Sonipat, Haryana, India"
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:outline-none text-center"
+                    />
+                </div>
                 <button 
                     onClick={findStores}
                     disabled={loading || !isMapReady}
                     className="bg-white text-black px-10 py-3 rounded-md font-semibold hover:bg-gray-200 transition-transform hover:scale-105 disabled:opacity-60 disabled:scale-100"
                 >
-                    {loading ? 'Searching...' : !isMapReady ? 'Map Loading...' : 'Find Stores Near Me'}
+                    {loading ? 'Searching...' : !isMapReady ? 'Map Loading...' : 'Find Stores'}
                 </button>
             </div>
         </section>
@@ -266,4 +295,3 @@ export default function StoresPage() {
     </div>
   );
 }
-
