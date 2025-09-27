@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-// Import the local medicine names data
 import medicineData from './medicine_names.json';
 
 // Icon component for the result cards
@@ -28,11 +27,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
+  // imageFile will now store the processed blob for OCR
+  const [imageFile, setImageFile] = useState(null); 
   const [isRecording, setIsRecording] = useState(false);
   const [speechStatus, setSpeechStatus] = useState('');
   const recognitionRef = useRef(null);
   const fileInputRef = useRef(null);
+  // Ref for a hidden canvas to perform image processing
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -45,9 +47,7 @@ export default function HomePage() {
       recognition.onstart = () => { setSpeechStatus('Listening...'); setIsRecording(true); };
       
       recognition.onresult = (event) => {
-        // MODIFICATION: Convert transcript to lowercase immediately to remove case sensitivity from speech input.
         const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
-        
         setMedicineName(transcript);
         handleCheckAuthenticity(null, transcript);
       };
@@ -74,25 +74,17 @@ export default function HomePage() {
     }
   };
 
-  /**
-   * Verifies by checking if the input text CONTAINS a known medicine name, ignoring case.
-   */
   const verifyWithLocalJSON = (text) => {
     if (!text || !Array.isArray(medicineData)) {
       return { found: false, name: null };
     }
     
-    // Convert input to lowercase
     const inputTextLower = text.trim().toLowerCase();
-
-    // Sort by length, longest first, to match "Aspirin Plus" before "Aspirin"
     const sortedMedicineData = [...medicineData].sort((a, b) => b.length - a.length);
 
     for (const medicineName of sortedMedicineData) {
-        // Convert dataset name to lowercase
         const medicineNameLower = medicineName.trim().toLowerCase();
         if (medicineNameLower && inputTextLower.includes(medicineNameLower)) {
-            // Return the original properly-cased name for display
             return { found: true, name: medicineName };
         }
     }
@@ -123,10 +115,56 @@ export default function HomePage() {
     return { found: false, name: text };
   };
 
+  // --- NEW FUNCTION: Image preprocessing ---
+  const preprocessImage = (img) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Set canvas dimensions to match image
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    // Draw image onto canvas
+    ctx.drawImage(img, 0, 0);
+
+    // Get image data
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Apply grayscale and simple contrast enhancement
+    const contrast = 10; // Adjust this value (0-100 recommended) for more/less contrast
+    const factor = (255 + contrast) / (255 - contrast);
+
+    for (let i = 0; i < data.length; i += 4) {
+      // Grayscale: Average R, G, B
+      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      
+      // Apply contrast to grayscale value
+      let processedValue = avg * factor;
+      processedValue = Math.min(255, Math.max(0, processedValue)); // Clamp to 0-255
+
+      data[i] = processedValue;     // Red
+      data[i + 1] = processedValue; // Green
+      data[i + 2] = processedValue; // Blue
+    }
+
+    // Put the modified data back on the canvas
+    ctx.putImageData(imageData, 0, 0);
+
+    // Convert canvas to a Blob (File-like object)
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        resolve(blob);
+      }, 'image/png', 0.9); // Use 'image/png' for lossless, or 'image/jpeg' for smaller files
+    });
+  };
+
   const handleCheckAuthenticity = async (e, spokenText = null) => {
     if (e) e.preventDefault();
     const textToUse = spokenText || medicineName;
-    if (!textToUse && !imageFile) {
+    if (!textToUse && !imageFile) { // imageFile now refers to the processed blob
         setResult({ status: 'Uncertain', message: 'Please enter a medicine name or upload an image.' });
         return;
     }
@@ -136,19 +174,24 @@ export default function HomePage() {
     let textToVerify = textToUse;
 
     try {
-        if (imageFile) {
+        if (imageFile) { // If an image was uploaded and processed
             setLoadingMessage('Uploading and analyzing image...');
             const ocrApiKey = 'K87893322888957'; 
             const formData = new FormData();
-            formData.append('file', imageFile);
+            formData.append('file', imageFile, 'processed_image.png'); // Use the processed blob
             formData.append('apikey', ocrApiKey);
             formData.append('language', 'eng');
+            formData.append('OCREngine', '2'); // Use OCR Engine 2 for better text recognition
+            formData.append('scale', 'true'); // Allow the OCR service to scale the image
+            
             const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
                 method: 'POST',
                 body: formData,
             });
+
             if (!ocrResponse.ok) throw new Error('Image analysis API request failed.');
             const ocrData = await ocrResponse.json();
+            
             if (ocrData.IsErroredOnProcessing || !ocrData.ParsedResults?.length) {
                  setResult({ status: 'Uncertain', message: `Could not analyze image. ${ocrData.ErrorMessage || 'Please try a clearer picture.'}` });
                  setLoading(false);
@@ -190,13 +233,31 @@ export default function HomePage() {
     }
   };
   
+  // --- MODIFIED handleImageChange ---
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       setResult(null);
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-      setMedicineName('');
+      setMedicineName(''); // Clear text input when image is selected
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = async () => {
+          // Preprocess the image
+          const processedBlob = await preprocessImage(img);
+          if (processedBlob) {
+            setImageFile(processedBlob);
+            setImagePreview(URL.createObjectURL(processedBlob)); // Show the processed image in preview
+          } else {
+            // Fallback if canvas processing fails
+            setImageFile(file);
+            setImagePreview(URL.createObjectURL(file));
+          }
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -231,6 +292,14 @@ export default function HomePage() {
             >
                 <svg className="w-10 h-10 text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
                 <h3 className="text-md font-semibold">Upload an image</h3>
+            </div>
+            <div className="text-center text-xs text-gray-500 mt-3">
+                <p>For best results:</p>
+                <ul className="list-disc list-inside">
+                    <li>Use good lighting and avoid shadows.</li>
+                    <li>Hold the camera steady.</li>
+                    <li>Ensure the text is in focus and not blurry.</li>
+                </ul>
             </div>
             <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
         </>
@@ -301,6 +370,9 @@ export default function HomePage() {
 
   return (
     <div className="bg-[#0D0D0D] text-white min-h-screen flex flex-col">
+      {/* Hidden canvas for image processing */}
+      <canvas ref={canvasRef} style={{ display: 'none' }}></canvas> 
+
       <main className="pt-16 flex-grow">
         <section className="text-center py-16 lg:py-24">
             <div className="container mx-auto px-4">
