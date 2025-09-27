@@ -19,10 +19,10 @@ const Navbar = () => {
                 Info
               </Link>
               <Link href="#" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
-                Clinics Nearby
+                Medstores Nearby
               </Link>
               <Link href="#" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
-                MedAlarm
+                Prescription Reader
               </Link>
             </div>
           </div>
@@ -32,7 +32,7 @@ const Navbar = () => {
                     Guidelines
                 </Link>
                 <Link href="#" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">
-                    Donate
+                    Compare Pricing
                 </Link>
             </div>
           </div>
