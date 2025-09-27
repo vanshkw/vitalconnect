@@ -13,13 +13,13 @@ export default function TermsAndConditionsPage() {
                             <h1 className="text-4xl sm:text-5xl font-bold text-white">
                                 User Terms & Conditions Agreement
                             </h1>
-                            <p className="text-gray-400 mt-3">Last Updated: September 26, 2025</p>
+                            <p className="text-gray-400 mt-3">Last Updated: September 27, 2025</p>
                         </div>
 
                         <div className="prose prose-invert max-w-none text-gray-300">
                             <h2>Introduction</h2>
                             <p>
-                                Welcome to Medi-Verify (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). These Terms & Conditions (&quot;Terms&quot;) govern your use of our application, website, and related services (collectively, the &quot;Services&quot;). By accessing or using the Services, you agree to these Terms. If you do not agree, please do not use our Services.
+                                Welcome to VitalConnect. These Terms & Conditions (&quot;Terms&quot;) govern your use of our application, website, and related services (collectively, the &quot;Services&quot;). By accessing or using the Services, you agree to these Terms. If you do not agree, please do not use our Services.
                             </p>
 
                             <h2>1. Medical Disclaimer</h2>
@@ -72,10 +72,7 @@ export default function TermsAndConditionsPage() {
                                 These Terms are governed by the laws of India. Any disputes will be handled in the courts of Sonipat, Haryana.
                             </p>
 
-                            <h2>10. Contact Us</h2>
-                            <p>
-                                If you have questions about these Terms, please contact us at: contact@mediverify.com
-                            </p>
+                            
                         </div>
                     </div>
                 </div>
