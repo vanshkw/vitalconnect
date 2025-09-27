@@ -14,13 +14,13 @@ export default function Footer() {
             <Link href="/" className="text-gray-400 hover:text-white transition-colors">
               Home
             </Link>
-            <Link href="/stores" className="text-gray-400 hover:text-white transition-colors">
+            <Link href="/medinfo" className="text-gray-400 hover:text-white transition-colors">
                Info
             </Link>
-            <Link href="/stores" className="text-gray-400 hover:text-white transition-colors">
+            <Link href="/medstores" className="text-gray-400 hover:text-white transition-colors">
               Medstores Nearby
             </Link>
-            <Link href="/stores" className="text-gray-400 hover:text-white transition-colors">
+            <Link href="/prescription" className="text-gray-400 hover:text-white transition-colors">
               Prescription Reader
             </Link>
           </nav>

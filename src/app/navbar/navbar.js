@@ -31,8 +31,8 @@ const Navbar = () => {
                  <Link href="/tandc" className="text-gray-300 hover:text-white px-4 py-2 rounded-md text-sm font-medium">
                     Guidelines
                 </Link>
-                <Link href="/pricing" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">
-                    Compare Pricing
+                <Link href="/availability" className="bg-white text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">
+                    Check Availability
                 </Link>
             </div>
           </div>
